@@ -10,11 +10,12 @@
 
 ModelChecker::ModelChecker(const AIG& aig) : aig(aig) {}
 
-bool ModelChecker::runBMC(int k, bool& foundCex, int& aPartSize) {
+bool ModelChecker::runBMC(int k, bool& foundCex, int& aPartSize, std::vector<int>& latchVars) {
     CNFGenerator cnf_gen(aig);
     cnf_gen.generateBMC(k);
     cnf_gen.writeDIMACS("out.cnf");
     aPartSize = cnf_gen.getAPartSize();
+    latchVars = cnf_gen.getLatchCNFVars(1);  // get from SAME instance
 
     // Delete stale proof — minisat uses exclusive create ("wox")
     std::remove("proof.txt");
@@ -37,43 +38,34 @@ bool ModelChecker::runBMC(int k, bool& foundCex, int& aPartSize) {
 bool ModelChecker::check(int maxBound) {
     std::vector<std::vector<int>> reachable;
 
+    if (aig.latches.empty()) {
+        bool foundCex = false;
+        int aPartSize = 0;
+        std::vector<int> latchVars;
+        bool unsat = runBMC(1, foundCex, aPartSize, latchVars);
+        if (foundCex) { std::cout << "Counterexample found at bound 1" << std::endl; return false; }
+        if (unsat)    { std::cout << "Fixpoint reached!" << std::endl; return true; }
+        return true;
+    }
+
     for (int k = 1; k <= maxBound; k++) {
         std::cout << "Checking bound " << k << "..." << std::endl;
 
         bool foundCex = false;
         int  aPartSize = 0;
-        bool unsat = runBMC(k, foundCex, aPartSize);
+        std::vector<int> latchVars;
+        bool unsat = runBMC(k, foundCex, aPartSize, latchVars);
 
         if (foundCex) {
             std::cout << "Counterexample found at bound " << k << std::endl;
             return false;
         }
 
-        if (aig.latches.empty()) {
-            bool foundCex = false;
-            int aPartSize = 0;
-            bool unsat = runBMC(1, foundCex, aPartSize);
-            if (foundCex) {
-                std::cout << "Counterexample found at bound 1" << std::endl;
-                return false;
-            }
-            if (unsat) {
-                std::cout << "Fixpoint reached!" << std::endl;
-                return true;
-            }
-            return true;
-        }
-
         if (unsat) {
             ProofParser proof;
             if (!proof.parse("proof.txt")) continue;
 
-            // Use actual CNF variable IDs of latches at boundary t=1
-            CNFGenerator cnf_gen(aig);
-            cnf_gen.generateBMC(k);
-            auto latchVars = cnf_gen.getLatchCNFVars(1);
             std::set<int> sharedVars(latchVars.begin(), latchVars.end());
-
             // Use actual A-part clause count as split point
             int splitPoint = aPartSize;
 
@@ -88,30 +80,19 @@ bool ModelChecker::check(int maxBound) {
                                  const std::vector<std::vector<int>>& existing) -> bool {
                 for (const auto& ec : existing) {
                     bool subsumed = true;
-                    for (int lit : ec) {
-                        if (std::find(newClause.begin(), newClause.end(), lit)
-                                == newClause.end()) {
-                            subsumed = false;
-                            break;
-                        }
-                    }
+                    for (int lit : ec)
+                        if (std::find(newClause.begin(), newClause.end(), lit) == newClause.end())
+                            { subsumed = false; break; }
                     if (subsumed) return true;
                 }
                 return false;
             };
 
             bool fixpoint = !interpolant.empty();
-            for (const auto& clause : interpolant) {
-                if (!isSubsumed(clause, reachable)) {
-                    fixpoint = false;
-                    break;
-                }
-            }
+            for (const auto& clause : interpolant)
+                if (!isSubsumed(clause, reachable)) { fixpoint = false; break; }
 
-            if (fixpoint) {
-                std::cout << "Fixpoint reached!" << std::endl;
-                return true;
-            }
+            if (fixpoint) { std::cout << "Fixpoint reached!" << std::endl; return true; }
 
             for (const auto& clause : interpolant)
                 reachable.push_back(clause);

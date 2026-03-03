@@ -2,7 +2,7 @@
 #include <fstream>
 #include <iostream>
 
-CNFGenerator::CNFGenerator(const AIG& aig) : aig(aig), nextVar(1) {}
+CNFGenerator::CNFGenerator(const AIG& aig) : aig(aig), nextVar(1), aPartClauses(0) {}
 
 int CNFGenerator::getCNFVar(unsigned aigLit, int time) {
     unsigned var = AIG::lit2var(aigLit);
@@ -24,7 +24,7 @@ int CNFGenerator::getCNFVar(unsigned aigLit, int time) {
     return AIG::isNegated(aigLit) ? -cnfVar : cnfVar;
 }
 
-std::vector<int> CNFGenerator::getLatchCNFVars(int t) {
+std::vector<int> CNFGenerator::getLatchCNFVars(int t) const {
     std::vector<int> vars;
     for (const auto& latch : aig.latches) {
         unsigned v = AIG::lit2var(latch.var);
@@ -88,6 +88,7 @@ void CNFGenerator::generateBMC(int k) {
     clauses.clear();
     varMap.clear();
     nextVar = 1;
+    aPartClauses = 0;
     
     // Initial state
     encodeInit();
@@ -108,8 +109,8 @@ void CNFGenerator::generateBMC(int k) {
     // (bad_0 OR bad_1 OR ... OR bad_k)
     std::vector<int> badClause;
     for (int t = 1; t <= k; t++) {
-        for (const auto& gate : aig.ands) {
-            badClause.push_back(getCNFVar(out, t));
+        for (const auto& outLit : aig.outputs) {
+            badClause.push_back(getCNFVar(outLit, t));
         }
     }
     if (!badClause.empty())

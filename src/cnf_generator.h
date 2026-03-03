@@ -25,6 +25,8 @@ private:
     
     // Map: (original_lit, timeframe) -> CNF variable
     int getCNFVar(unsigned aigLit, int time);
+
+    int getAPartSize() const { return aPartClauses; }
     
     // Add clause
     void addClause(const std::vector<int>& clause);
@@ -43,6 +45,9 @@ private:
     
     // Variable mapping storage
     std::vector<std::vector<int>> varMap; // [time][var] -> cnf_var
+
+    // Returns CNF variable IDs for all latches at timeframe t
+    std::vector<int> getLatchCNFVars(int t);
 };
 
 #endif

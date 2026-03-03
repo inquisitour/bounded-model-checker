@@ -2,16 +2,26 @@
 #include "cnf_generator.h"
 #include "proof_parser.h"
 #include "interpolant.h"
+#include <algorithm>
 #include <iostream>
+#include <cstdio>
 #include <cstdlib>
 #include <set>
 
 ModelChecker::ModelChecker(const AIG& aig) : aig(aig) {}
 
+auto latchVars = cnf_gen.getLatchCNFVars(1);  // boundary at t=1
+std::set<int> sharedVars(latchVars.begin(), latchVars.end());
+
 bool ModelChecker::runBMC(int k, bool& foundCex) {
     CNFGenerator cnf(aig);
     cnf.generateBMC(k);
     cnf.writeDIMACS("out.cnf");
+    int aPartSize = cnf_gen.getAPartSize();
+
+
+    // Delete stale proof before running — minisat uses exclusive create
+    std::remove("proof.txt");
     
     (void)system("./minisatp/minisat out.cnf -r result.txt -p proof.txt > /dev/null 2>&1");
     
@@ -55,7 +65,7 @@ bool ModelChecker::check(int maxBound) {
             
             // Split point: A = initial + first transition
             // Approximate: first portion of clauses
-            int splitPoint = proof.getNodes().size() / 3;
+            int splitPoint = aPartSize;  // A = init + T(s0,s1)
             
             Interpolator interp(proof, splitPoint, sharedVars);
             auto interpolant = interp.computeInterpolant();
@@ -63,16 +73,35 @@ bool ModelChecker::check(int maxBound) {
             std::cout << "  Safe at bound " << k << ", interpolant: " 
                       << interpolant.size() << " clauses" << std::endl;
             
-            // Fixpoint check: is interpolant subsumed by reachable?
-            // Simplified: check if interpolant is empty or unchanged
-            if (interpolant.empty() || interpolant == reachable) {
-                std::cout << "Fixpoint reached!" << std::endl;
-                return true;  // Proved SAFE
-            }
-            
-            // Update reachable: Q' = Q ∨ I
+            // Check if every clause in interpolant is subsumed by some clause in reachable
+            auto isSubsumed = [](const std::vector<int>& newClause,
+                                const std::vector<std::vector<int>>& existing) -> bool {
+                for (const auto& existing_clause : existing) {
+                    // existing_clause subsumes newClause if all lits of existing_clause
+                    // appear in newClause
+                    bool subsumed = true;
+                    for (int lit : existing_clause) {
+                        if (std::find(newClause.begin(), newClause.end(), lit) == newClause.end()) {
+                            subsumed = false;
+                            break;
+                        }
+                    }
+                    if (subsumed) return true;
+                }
+                return false;
+            };
+
+            bool fixpoint = !interpolant.empty();
             for (const auto& clause : interpolant) {
-                reachable.push_back(clause);
+                if (!isSubsumed(clause, reachable)) {
+                    fixpoint = false;
+                    break;
+                }
+            }
+
+            if (fixpoint) {
+                std::cout << "Fixpoint reached!" << std::endl;
+                return true;
             }
         }
     }

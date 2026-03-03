@@ -33,24 +33,23 @@ bool ProofParser::parse(const std::string& filename) {
         if ((tmp & 1) == 0) {
             // Root clause
             node.isRoot = true;
-            int idx = tmp >> 1;
-            if (idx > 0) {
-                int lit = (idx >> 1) + 1;
+            int idx = (int)(tmp >> 1);
+            
+            // idx == 0 is a valid literal (CNF var 1, positive) — NOT empty clause
+            // Decode first literal unconditionally
+            int lit = (idx >> 1) + 1;
+            if (idx & 1) lit = -lit;
+            node.clause.push_back(lit);
+
+            while (true) {
+                uint64_t delta = getUInt(f);
+                if (delta == 0) break;
+                idx += (int)delta;
+                lit = (idx >> 1) + 1;
                 if (idx & 1) lit = -lit;
                 node.clause.push_back(lit);
-                
-                while (true) {
-                    uint64_t delta = getUInt(f);
-                    if (delta == 0) break;
-                    idx += delta;
-                    lit = (idx >> 1) + 1;
-                    if (idx & 1) lit = -lit;
-                    node.clause.push_back(lit);
-                }
-            } else {
-                // Empty clause case
-                getUInt(f); // consume terminator
             }
+        }
         } else {
             // Chain
             node.isRoot = false;

@@ -14,10 +14,24 @@ int CNFGenerator::getCNFVar(unsigned aigLit, int time) {
     
     if (varMap[time][var] == 0) {
         varMap[time][var] = nextVar++;
+        // AIG variable 0 is constant FALSE — force it
+        if (var == 0) {
+            addClause({-varMap[time][var]});
+        }
     }
     
     int cnfVar = varMap[time][var];
     return AIG::isNegated(aigLit) ? -cnfVar : cnfVar;
+}
+
+std::vector<int> CNFGenerator::getLatchCNFVars(int t) {
+    std::vector<int> vars;
+    for (const auto& latch : aig.latches) {
+        unsigned v = AIG::lit2var(latch.var);
+        if ((int)varMap.size() > t && varMap[t][v] != 0)
+            vars.push_back(varMap[t][v]);
+    }
+    return vars;
 }
 
 void CNFGenerator::addClause(const std::vector<int>& clause) {
@@ -77,9 +91,11 @@ void CNFGenerator::generateBMC(int k) {
     
     // Initial state
     encodeInit();
+    if (k >= 1) encodeTransition(0);
+    aPartClauses = (int)clauses.size();  // A = init + T(s0,s1)
     
-    // Transitions for timeframes 0..k-1
-    for (int t = 0; t < k; t++) {
+    // Transitions for timeframes 1..k-1
+    for (int t = 1; t < k; t++) {
         encodeTransition(t);
     }
     
@@ -88,19 +104,16 @@ void CNFGenerator::generateBMC(int k) {
         encodeAnd(gate, k);
     }
     
-    // Bad state reachable at ANY timeframe 0..k
+    // Bad state reachable at ANY timeframe 1..k
     // (bad_0 OR bad_1 OR ... OR bad_k)
     std::vector<int> badClause;
-    for (int t = 0; t <= k; t++) {
-        // Encode ANDs needed for output at time t
-        if (t > 0) {
-            for (const auto& gate : aig.ands) {
-                encodeAnd(gate, t);
-            }
+    for (int t = 1; t <= k; t++) {
+        for (const auto& gate : aig.ands) {
+            badClause.push_back(getCNFVar(out, t));
         }
-        badClause.push_back(getCNFVar(aig.outputs[0], t));
     }
-    addClause(badClause);
+    if (!badClause.empty())
+        addClause(badClause);
 }
 
 void CNFGenerator::writeDIMACS(const std::string& filename) {

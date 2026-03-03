@@ -49,11 +49,26 @@ bool ModelChecker::check(int maxBound) {
             return false;
         }
 
+        if (aig.latches.empty()) {
+            bool foundCex = false;
+            int aPartSize = 0;
+            bool unsat = runBMC(1, foundCex, aPartSize);
+            if (foundCex) {
+                std::cout << "Counterexample found at bound 1" << std::endl;
+                return false;
+            }
+            if (unsat) {
+                std::cout << "Fixpoint reached!" << std::endl;
+                return true;
+            }
+            return true;
+        }
+
         if (unsat) {
             ProofParser proof;
             if (!proof.parse("proof.txt")) continue;
 
-            // Bug 5 fix: use actual CNF variable IDs of latches at boundary t=1
+            // Use actual CNF variable IDs of latches at boundary t=1
             CNFGenerator cnf_gen(aig);
             cnf_gen.generateBMC(k);
             auto latchVars = cnf_gen.getLatchCNFVars(1);
@@ -68,7 +83,7 @@ bool ModelChecker::check(int maxBound) {
             std::cout << "  Safe at bound " << k << ", interpolant: "
                       << interpolant.size() << " clauses" << std::endl;
 
-            // Bug 6 fix: semantic subsumption check instead of syntactic equality
+            // Semantic subsumption check instead of syntactic equality
             auto isSubsumed = [](const std::vector<int>& newClause,
                                  const std::vector<std::vector<int>>& existing) -> bool {
                 for (const auto& ec : existing) {

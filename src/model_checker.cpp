@@ -74,7 +74,7 @@ bool ModelChecker::check(int maxBound) {
             auto latchVars = cnf_gen.getLatchCNFVars(1);
             std::set<int> sharedVars(latchVars.begin(), latchVars.end());
 
-            // Bug 4 fix: use actual A-part clause count as split point
+            // Use actual A-part clause count as split point
             int splitPoint = aPartSize;
 
             Interpolator interp(proof, splitPoint, sharedVars);

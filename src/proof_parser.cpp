@@ -17,26 +17,25 @@ uint64_t ProofParser::getUInt(FILE* f) {
 bool ProofParser::parse(const std::string& filename) {
     FILE* f = fopen(filename.c_str(), "rb");
     if (!f) return false;
-    
+
     nodes.clear();
     int id = 0;
-    
+
     while (true) {
         int firstByte = fgetc(f);
         if (firstByte == EOF) break;
         ungetc(firstByte, f);
-        
+
         uint64_t tmp = getUInt(f);
-        
+
         ProofNode node;
-        
+
         if ((tmp & 1) == 0) {
             // Root clause
             node.isRoot = true;
             int idx = (int)(tmp >> 1);
-            
-            // idx == 0 is a valid literal (CNF var 1, positive) — NOT empty clause
-            // Decode first literal unconditionally
+
+            // idx == 0 is valid literal (CNF var 1, positive) — NOT empty clause
             int lit = (idx >> 1) + 1;
             if (idx & 1) lit = -lit;
             node.clause.push_back(lit);
@@ -49,33 +48,32 @@ bool ProofParser::parse(const std::string& filename) {
                 if (idx & 1) lit = -lit;
                 node.clause.push_back(lit);
             }
-        }
         } else {
             // Chain
             node.isRoot = false;
-            int idDelta = tmp >> 1;
-            if (idDelta > id) break;  // sanity check
+            int idDelta = (int)(tmp >> 1);
+            if (idDelta > id) break;
             node.chainIds.push_back(id - idDelta);
-            
+
             while (true) {
                 uint64_t v = getUInt(f);
                 if (v == 0) break;
-                node.chainVars.push_back(v - 1);
+                node.chainVars.push_back((int)(v - 1));
                 uint64_t delta = getUInt(f);
                 if ((int)delta > id) break;
-                node.chainIds.push_back(id - delta);
+                node.chainIds.push_back(id - (int)delta);
             }
-            
+
             if (node.chainVars.empty()) {
-                // Deletion - don't add node, don't increment id
+                // Deletion record — skip
                 continue;
             }
         }
-        
+
         nodes.push_back(node);
         id++;
     }
-    
+
     fclose(f);
     return true;
 }

@@ -14,7 +14,7 @@ public:
 private:
     const AIG& aig;
     
-    bool runBMC(int k, bool& foundCex);
+    bool runBMC(int k, bool& foundCex, int& aPartSize);
 };
 
 #endif

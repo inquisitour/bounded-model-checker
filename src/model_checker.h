@@ -13,7 +13,6 @@ public:
     
 private:
     const AIG& aig;
-    std::vector<std::vector<int>> reachable;  // over-approximation of reachable states
     
     bool runBMC(int k, bool& foundCex);
 };

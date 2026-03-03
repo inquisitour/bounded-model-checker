@@ -18,4 +18,6 @@ test: bmc
 	./bmc 20 demo/safe_small.aag; \
 	./bmc 10 demo/safe_medium.aag; \
 	./bmc 20 demo/s298.aag; \
-	./bmc 20 demo/bakery.aag
+	./bmc 20 demo/bakery.aag; \
+	./bmc 20 demo/true_safe.aag; \
+	./bmc 20 demo/unsafe_k3.aag
